@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Keyword Surprise — Web Game</title>
+  <style>
+    :root{--bg:#0b1020;--card:#0f1724;--accent:#7dd3fc;--muted:#9aa4b2;--glass:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{background:linear-gradient(180deg,#051022 0%,#071225 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:18px}
+    .app{width:100%;max-width:820px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:18px;box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{margin:0;font-size:20px;letter-spacing:0.2px}
+    .controls{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+    input[type="text"]{flex:1;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit;font-size:15px;min-width:160px}
+    button{padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(90deg,var(--accent),#4ade80);color:#022;cursor:pointer;font-weight:600}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--accent);font-weight:600}
+    .display{margin-top:18px;background:rgba(255,255,255,0.02);padding:14px;border-radius:12px;min-height:260px;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center}
+    .meta{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .result-title{font-size:14px;color:var(--muted);word-break:break-word}
+    .viewer{width:100%;max-height:520px;display:flex;align-items:center;justify-content:center}
+    img.viewer-img{max-width:100%;max-height:520px;border-radius:10px;object-fit:contain}
+    iframe.viewer-vid{width:100%;height:360px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .small{padding:6px 8px;border-radius:8px;font-size:13px}
+    .muted{color:var(--muted);font-size:13px}
+    .history{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+    .chip{background:rgba(255,255,255,0.02);padding:6px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+    .spinner{border:4px solid rgba(255,255,255,0.06);border-top-color:var(--accent);border-radius:50%;width:36px;height:36px;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    footer{margin-top:12px;color:var(--muted);font-size:13px;text-align:center}
+    @media (max-width:520px){
+      iframe.viewer-vid{height:220px}
+      .viewer{padding:6px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Keyword Surprise web game">
+    <header>
+      <h1>Keyword Surprise 🎲</h1>
+      <div class="muted">Type a word, get a random image/video/link</div>
+    </header>
+
+    <div class="controls">
+      <input id="kw" type="text" placeholder="Enter keyword (eg. cat, paris, moonwalk)" autocomplete="off" />
+      <button id="searchBtn">Search</button>
+      <button id="randomBtn" class="secondary">Surprise Me</button>
+      <button id="nextBtn" class="secondary">Next Random</button>
+    </div>
+
+    <div class="display" id="display">
+      <div class="viewer" id="viewer">
+        <div class="muted">Enter a keyword and press Search (or Surprise Me)</div>
+      </div>
+
+      <div class="meta" id="meta" style="display:none">
+        <div class="result-title" id="resultTitle"></div>
+        <div class="actions">
+          <button id="openBtn" class="small">Open source</button>
+          <button id="copyBtn" class="small secondary">Copy URL</button>
+          <button id="downloadBtn" class="small secondary">Download (image)</button>
+        </div>
+      </div>
+
+      <div class="history" id="history"></div>
+    </div>
+
+    <footer class="muted">Works best when server is hosted (see README). Videos may require tap-to-play on iOS.</footer>
+  </div>
+
+<script>
+(async function(){
+  const kwInput = document.getElementById('kw');
+  const searchBtn = document.getElementById('searchBtn');
+  const randomBtn = document.getElementById('randomBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const viewer = document.getElementById('viewer');
+  const meta = document.getElementById('meta');
+  const resultTitle = document.getElementById('resultTitle');
+  const openBtn = document.getElementById('openBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const historyWrap = document.getElementById('history');
+
+  let results = [];
+  let currentIndex = -1;
+  let history = [];
+
+  function showLoading() {
+    viewer.innerHTML = '<div class="spinner" role="status" aria-label="loading"></div>';
+    meta.style.display = 'none';
+  }
+
+  function showMessage(txt) {
+    viewer.innerHTML = '<div class="muted">' + txt + '</div>';
+    meta.style.display = 'none';
+  }
+
+  function renderResult(item) {
+    meta.style.display = 'flex';
+    resultTitle.textContent = (item.title || item.url || item.embed || 'Untitled result');
+
+    openBtn.onclick = () => {
+      const target = item.url || item.source || item.embed;
+      if (target) window.open(target, '_blank');
+    };
+    copyBtn.onclick = async () => {
+      const toCopy = item.url || item.embed || item.source || '';
+      try {
+        await navigator.clipboard.writeText(toCopy);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(()=> copyBtn.textContent = 'Copy URL', 900);
+      } catch(e) {
+        copyBtn.textContent = 'Copy';
+      }
+    };
+
+    // download button only for images
+    if (item.type === 'image' && item.url) {
+      downloadBtn.style.display = 'inline-block';
+      downloadBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.href = item.url;
+        a.download = 'surprise-image';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      };
+    } else {
+      downloadBtn.style.display = 'none';
+    }
+
+    // Render viewer
+    if (item.type === 'image') {
+      viewer.innerHTML = '<img class="viewer-img" src="' + item.url + '" alt="' + (item.title || '') + '" />';
+    } else if (item.type === 'video') {
+      // prefer embed if available (YouTube)
+      const src = item.embed || item.url;
+      viewer.innerHTML = '<iframe class="viewer-vid" src="' + src + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+    } else { // link
+      viewer.innerHTML = '<div style="text-align:center"><a href="' + item.url + '" target="_blank" rel="noopener" class="muted">' + (item.title || item.url) + '</a></div>';
+    }
+
+    // add to history UI
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = (item.title || item.type || 'result').slice(0, 30);
+    chip.onclick = () => {
+      // find this item in results and set currentIndex
+      const idx = results.findIndex(r => (r.url || r.embed) === (item.url || item.embed));
+      if (idx >= 0) {
+        currentIndex = idx;
+        renderResult(results[currentIndex]);
+      }
+    };
+    historyWrap.prepend(chip);
+    history.unshift(item);
+    if (history.length > 30) {
+      history.pop();
+      if (historyWrap.firstChild) {
+        // keep only recent 30 chips
+        while (historyWrap.childNodes.length > 30) historyWrap.removeChild(historyWrap.lastChild);
+      }
+    }
+  }
+
+  async function doSearch(query) {
+    if (!query) {
+      showMessage('Please type a keyword first.');
+      return;
+    }
+    showLoading();
+    try {
+      const resp = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const json = await resp.json();
+      if (!json || !json.results || json.results.length === 0) {
+        showMessage('No results found. Try a different keyword.');
+        return;
+      }
+      results = json.results;
+      // Shuffle lightly then pick a random
+      // but keep results stable for "Next Random"
+      // We'll randomize the order
+      for (let i = results.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [results[i], results[j]] = [results[j], results[i]];
+      }
+      currentIndex = Math.floor(Math.random() * results.length);
+      renderResult(results[currentIndex]);
+    } catch (err) {
+      console.error(err);
+      showMessage('Network/server error. Ensure server is running.');
+    }
+  }
+
+  searchBtn.addEventListener('click', () => doSearch(kwInput.value.trim()));
+  kwInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') doSearch(kwInput.value.trim()); });
+
+  randomBtn.addEventListener('click', async () => {
+    // pick a random popular-ish keyword if none provided
+    const seedKeywords = ['cat', 'ocean', 'space', 'sunset', 'mountain', 'dance', 'paris', 'pizza', 'vintage car', 'robot'];
+    const q = seedKeywords[Math.floor(Math.random()*seedKeywords.length)];
+    kwInput.value = q;
+    await doSearch(q);
+  });
+
+  nextBtn.addEventListener('click', () => {
+    if (!results || results.length === 0) return;
+    currentIndex = (currentIndex + 1) % results.length;
+    renderResult(results[currentIndex]);
+  });
+
+  // On load try a small placeholder
+  //showMessage('Type a keyword and press Search.');
+})();
+</script>
+</body>
+</html>
