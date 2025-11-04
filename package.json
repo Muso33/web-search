@@ -1,0 +1,18 @@
+{
+  "name": "keyword-surprise",
+  "version": "1.0.0",
+  "description": "Keyword Surprise — web game (browser playable on iOS). Server scrapes public search results and YouTube to return images, videos, and links.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^2.6.7",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}
